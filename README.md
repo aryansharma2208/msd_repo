@@ -11,7 +11,8 @@ GitHub Actions.
 
 **Docs:** [Architecture / request path](docs/architecture.md) ·
 [Operations note (outage checklist)](docs/operations.md) ·
-[Example CI output](docs/ci-output.md)
+[Example CI output](docs/ci-output.md) ·
+[Evidence](docs/evidence.md)
 
 ## Repository layout
 
@@ -183,3 +184,12 @@ For a full outage checklist see [docs/operations.md](docs/operations.md).
   the brief allows. CI validates code and configuration and can check the live endpoint.
 - Free-tier eligibility depends on the account's age and plan; the instance
   type is a variable for that reason. Destroy resources when finished.
+
+## Evidence
+
+Screenshots and terminal output from the deployed instance (service status,
+crash restart, hang recovery, reboot, network restrictions) are in
+[docs/evidence.md](docs/evidence.md); the CI run is in
+[docs/ci-output.md](docs/ci-output.md).
+
+![systemctl status showing hello.service active and enabled](docs/images/ssh-service-status.png)
