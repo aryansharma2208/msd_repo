@@ -1,5 +1,22 @@
 # Architecture and request path
 
+## Overview: deploy, run and check
+
+```mermaid
+flowchart LR
+    L[Your laptop] -->|"bash scripts/deploy.sh"| TF[Terraform]
+    TF -->|creates| SG["Security group: 80 open, 22 only your IP"]
+    TF -->|creates| EC2[EC2 t3.micro]
+    TF -->|sends user data| CI[cloud-init first boot]
+    CI -->|installs| SVC[hello.service on port 80]
+    CI -->|installs| TMR[health-check timer]
+    TMR -->|"every minute: curl /health, restart if dead"| SVC
+    U[Internet user] -->|HTTP 80| SG --> SVC
+    GH[GitHub Actions] -->|"tests + verify.sh against live URL"| SVC
+```
+
+## Network and runtime detail
+
 ```mermaid
 flowchart LR
     user([Internet user]) -->|HTTP :80| sg
