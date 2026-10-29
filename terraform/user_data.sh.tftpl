@@ -1,0 +1,32 @@
+#!/bin/bash
+# First-boot setup, rendered by Terraform and run once by cloud-init.
+# Output is logged to /var/log/cloud-init-output.log on the instance.
+set -euxo pipefail
+
+# Dedicated, unprivileged user for the service.
+id hello >/dev/null 2>&1 || useradd --system --no-create-home --shell /sbin/nologin hello
+
+# Application
+install -d -m 0755 /opt/hello
+echo '${app_py}' | base64 -d > /opt/hello/app.py
+chmod 0644 /opt/hello/app.py
+
+# systemd units and the health check script
+echo '${service_unit}'      | base64 -d > /etc/systemd/system/hello.service
+echo '${healthcheck_unit}'  | base64 -d > /etc/systemd/system/hello-healthcheck.service
+echo '${healthcheck_timer}' | base64 -d > /etc/systemd/system/hello-healthcheck.timer
+echo '${healthcheck_sh}'    | base64 -d > /usr/local/bin/hello-healthcheck.sh
+chmod 0755 /usr/local/bin/hello-healthcheck.sh
+
+# Enable = start on every boot; --now = start immediately.
+systemctl daemon-reload
+systemctl enable --now hello.service
+systemctl enable --now hello-healthcheck.timer
+
+# Fail the boot script loudly if the service did not come up.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  curl -fsS --max-time 3 http://127.0.0.1/health && exit 0
+  sleep 3
+done
+echo "hello.service did not become healthy" >&2
+exit 1

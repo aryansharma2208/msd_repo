@@ -1,0 +1,29 @@
+[Unit]
+Description=hello-service demo HTTP service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hello
+Group=hello
+Environment=APP_PORT=80
+ExecStart=/usr/bin/python3 /opt/hello/app.py
+
+# Restart automatically if the process crashes or is killed.
+Restart=always
+RestartSec=3
+
+# Allow binding to port 80 without running as root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# Basic hardening: the service cannot gain privileges or write to the system.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+# Start on every boot.
+WantedBy=multi-user.target

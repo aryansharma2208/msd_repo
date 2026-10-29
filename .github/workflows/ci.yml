@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    name: Test app and scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Syntax check
+        run: python -m py_compile app/app.py
+
+      - name: Unit tests
+        working-directory: app
+        run: python -m unittest -v
+
+      - name: ShellCheck scripts
+        run: shellcheck scripts/*.sh deploy/*.sh
+
+      - name: Smoke test (start the service and run verify.sh against it)
+        run: |
+          APP_PORT=8080 python app/app.py > app.log 2>&1 &
+          for _ in $(seq 1 10); do curl -fs http://127.0.0.1:8080/health && break; sleep 1; done
+          bash scripts/verify.sh http://127.0.0.1:8080
+          cat app.log
+
+  terraform:
+    name: Validate Terraform configuration
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Format check
+        run: terraform fmt -check -recursive
+
+      - name: Init (no backend, no cloud credentials needed)
+        run: terraform init -backend=false -input=false
+
+      - name: Validate
+        run: terraform validate
+
+  live-check:
+    name: Check the deployed service
+    runs-on: ubuntu-latest
+    needs: app
+    # Runs only when the repository variable SERVICE_URL is set
+    # (Settings > Secrets and variables > Actions > Variables).
+    if: ${{ vars.SERVICE_URL != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify live endpoint
+        run: bash scripts/verify.sh "${{ vars.SERVICE_URL }}"

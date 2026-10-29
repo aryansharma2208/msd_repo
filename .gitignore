@@ -1,0 +1,14 @@
+# Terraform state and local settings (contain your IP / resource IDs)
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars
+terraform/crash.log
+
+# Python
+__pycache__/
+*.pyc
+
+# Logs
+*.log

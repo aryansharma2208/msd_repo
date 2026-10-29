@@ -1,0 +1,6 @@
+[Unit]
+Description=hello-service health check (restarts it if /health fails)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/hello-healthcheck.sh
