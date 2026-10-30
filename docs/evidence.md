@@ -1,7 +1,7 @@
 # Evidence
 
 Proof that the deployed instance (`t3.micro`, Amazon Linux 2023, ap-south-1)
-behaves as the README claims. Captured on 2026-10-29 against
+behaves as the README claims. Captured on 2026-10-29 and 2026-10-30 against
 `http://3.110.27.143` (the IP changes on every new deploy).
 
 ## 1. Service is running under systemd
@@ -10,16 +10,9 @@ behaves as the README claims. Captured on 2026-10-29 against
 
 ## 2. Endpoints answer from the internet
 
-```text
-$ bash scripts/verify.sh http://3.110.27.143
-Checking http://3.110.27.143/health ...
-  OK  {"status": "ok", "uptime_seconds": 3097}
-Checking http://3.110.27.143/ ...
-  OK  Hello from hello-service!
-Checking unknown path returns 404 ...
-  OK  404
-All checks passed.
-```
+`scripts/verify.sh` run from the admin laptop against the public IP:
+
+![verify.sh against the public IP: health, root and 404 checks all pass](images/verify-public.png)
 
 ## 3. Crash: systemd restarts the process
 
@@ -30,66 +23,35 @@ All checks passed.
 ## 4. Hang: the health check detects it and restarts the service
 
 The process is frozen with `SIGSTOP`, so it is still "running" but answers
-nothing. The 1-minute timer probes `/health`, restarts the service and logs the
-result. Recovery took about 78 s.
+nothing, and systemd alone would not notice. The 1-minute timer probes
+`/health`, logs `FAIL`, restarts the service and logs `RECOVERED` once it
+answers again. An earlier timed run took 78 s from freeze to recovery.
 
-```text
-[ec2-user@ip-172-31-9-186 ~]$ systemctl show -p MainPID hello.service
-MainPID=2583
-[ec2-user@ip-172-31-9-186 ~]$ sudo systemctl kill -s SIGSTOP hello.service    # 21:06:55 UTC
-[ec2-user@ip-172-31-9-186 ~]$ curl -sS --max-time 3 http://127.0.0.1/health
-curl: (28) Operation timed out after 3002 milliseconds with 0 bytes received
-[ec2-user@ip-172-31-9-186 ~]$ journalctl -t hello-healthcheck --since -3min --no-pager
-Oct 29 21:08:08 ip-172-31-9-186 hello-healthcheck[5771]: FAIL: http://127.0.0.1/health not healthy, restarting hello.service
-Oct 29 21:08:13 ip-172-31-9-186 hello-healthcheck[5782]: RECOVERED: hello.service healthy after restart
-[ec2-user@ip-172-31-9-186 ~]$ systemctl show -p MainPID hello.service
-MainPID=5775
-[ec2-user@ip-172-31-9-186 ~]$ curl -sS --max-time 3 http://127.0.0.1/health
-{"status": "ok", "uptime_seconds": 9}
-```
+![SIGSTOP on hello.service, then the health check logs FAIL and RECOVERED](images/hang-recovery.png)
 
 ## 5. Reboot: the service starts on boot
 
-```text
-[ec2-user@ip-172-31-9-186 ~]$ uptime -s
-2026-10-29 20:05:17
-[ec2-user@ip-172-31-9-186 ~]$ sudo systemctl reboot              # 21:08:49 UTC
+The instance is rebooted at 08:37:56 UTC:
 
-# from the laptop, polling /health every 5 s:
-healthy again after ~10s at Thu Oct 29 21:09:05 UTC 2026
+![sudo reboot closes the SSH session](images/reboot.png)
 
-$ bash scripts/verify.sh http://3.110.27.143
-Checking http://3.110.27.143/health ...
-  OK  {"status": "ok", "uptime_seconds": 0}
-Checking http://3.110.27.143/ ...
-  OK  Hello from hello-service!
-Checking unknown path returns 404 ...
-  OK  404
-All checks passed.
+After the reboot, `verify.sh` passes again with no manual action. The low
+`uptime_seconds` (43) shows this is a fresh process started by systemd at boot:
 
-[ec2-user@ip-172-31-9-186 ~]$ uptime -s
-2026-10-29 21:08:58
-[ec2-user@ip-172-31-9-186 ~]$ systemctl is-enabled hello.service hello-healthcheck.timer
-enabled
-enabled
-[ec2-user@ip-172-31-9-186 ~]$ systemctl is-active hello.service hello-healthcheck.timer
-active
-active
-```
+![verify.sh passing after the reboot, uptime 43 seconds](images/verify-public.png)
 
 ## 6. Network restrictions
 
-Probed from the admin laptop (public IP `49.43.133.168`, the `admin_cidr`):
+Requests to the instance's own public IP leave through the internet gateway and
+come back in through the security group, so the firewall rules apply. Port 8080
+**times out**: the security group drops the packets, so the connection is never
+even refused. Port 80, the only public port, answers:
 
-```text
-$ curl --max-time 5 http://3.110.27.143:8080/
-curl: (28) Connection timed out after 5007 milliseconds
+![curl to port 8080 times out, curl to port 80 /health returns ok](images/network-checks.png)
 
-port 22:   open              (allowed only from 49.43.133.168/32)
-port 80:   open              (public)
-port 8080: closed/filtered   (app's dev port, not exposed)
-port 3306: closed/filtered
-```
+A port probe from the admin laptop (`49.43.133.168`, the `admin_cidr`) gave the
+same picture: 22 and 80 open, 8080 and 3306 filtered. SSH is open only to that
+`/32`.
 
 ## 7. CI
 
